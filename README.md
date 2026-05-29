@@ -1,13 +1,26 @@
-# hAChE Peptide Screening Colab
+# Colab Bioinformatics Utilities
 
-Colab notebook for screening peptide candidates as human acetylcholinesterase (hAChE) inhibitors using a PAS/no-PAS co-folding filter followed by docking/MM-GBSA ranking.
+Small collection of Google Colab-ready notebooks and scripts for peptide and protein-structure workflows.
+
+This repository is **not** the active peptide-screening protocol. Notebooks here are kept as practical, reusable utilities that can be run, adapted or inspected independently.
 
 ## Contents
 
-- `hAChE_peptide_screening_modular_docking.ipynb`: main notebook.
+- `protenix_colab_template.ipynb`: standalone Protenix notebook for Google Colab. It installs Protenix in an isolated environment, prepares protein-peptide JSON inputs, optionally runs predictions on a GPU runtime, inventories output files and exports the run folder.
 
-## Notes
+## Protenix Notebook Scope
 
-The notebook is designed to keep running in current Google Colab environments even when optional engines are unavailable. Co-folding outputs are treated as a stage-1 PAS localization filter, not as final affinity ranking evidence. Final prioritization is reserved for post-filter docking/rescoring metrics such as HADDOCK cluster score, MM-GBSA global energy, and Trp286 residue-level contribution.
+The Protenix notebook is a technical implementation example, not a ranking workflow. Its predicted complexes should be treated as exploratory structural hypotheses that require manual inspection and independent validation before they inform synthesis or screening decisions.
 
-For LightDock/HADDOCK3-specific runs, use a Python 3.10/3.11 environment. If a previous install attempt upgraded Colab packages such as `numpy`, `pandas`, or `protobuf`, restart the Colab runtime before rerunning the corrected install cell. The Protenix environment is created with `virtualenv` because Colab's Python 3.12 `venv`/`ensurepip` bootstrap can fail. Protenix also needs `ninja`/build tools so PyTorch can compile its CUDA layer normalization extension on first run.
+The notebook intentionally omits the previous docking, PAS-filter, HADDOCK, LightDock and MM/GBSA ranking sections. Those steps are not maintained here as part of the current screening strategy.
+
+## Running In Colab
+
+1. Open `protenix_colab_template.ipynb` in Google Colab.
+2. Select `Runtime > Change runtime type > GPU`.
+3. Run the install cell.
+4. Replace the demo target sequence and peptide CSV with your own inputs.
+5. Generate the Protenix JSON files.
+6. Set `RUN_PROTENIX = True` only after the JSON inputs look correct.
+
+Outputs are written under `/content/protenix_colab_jobs` and can be exported as `protenix_colab_jobs.zip`.
