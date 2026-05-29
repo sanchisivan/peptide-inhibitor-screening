@@ -86,8 +86,10 @@ if [ "$INSTALL_LIGHTDOCK" = true ]; then
   if [ ! -x /content/bin/micromamba ]; then
     curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C /content/bin --strip-components=1 bin/micromamba
   fi
-  /content/bin/micromamba create -y -p /content/lightdock_env -c conda-forge python=3.10 pip numpy scipy cython prody || echo "WARNING: micromamba environment creation failed."
-  /content/lightdock_env/bin/python -m pip install lightdock==0.9.2post1 || echo "WARNING: LightDock install failed inside /content/lightdock_env."
+  /content/bin/micromamba create -y -p /content/lightdock_env -c conda-forge python=3.10 pip numpy scipy cython biopython prody || echo "WARNING: micromamba environment creation failed."
+  # ProDy is already provided by conda-forge above. Use --no-deps so pip does
+  # not try to build ProDy from source and fail in Colab.
+  /content/lightdock_env/bin/python -m pip install --no-deps lightdock==0.9.2post1 || echo "WARNING: LightDock install failed inside /content/lightdock_env."
 fi
 
 if [ "$INSTALL_BOLTZ2" = true ]; then
