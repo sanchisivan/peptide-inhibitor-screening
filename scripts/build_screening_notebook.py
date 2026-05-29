@@ -572,6 +572,16 @@ for _, job in boltz_jobs.iterrows():
         rows.append(row)
 
 boltz_scores = pd.DataFrame(rows)
+for col, default in {
+    'missing_output': True,
+    'model_file': '',
+    'tested_site_dmin_A': np.nan,
+    'tested_site_contacts_5A': 0,
+    'confidence_score': np.nan,
+    'protein_iptm': np.nan,
+}.items():
+    if col not in boltz_scores.columns:
+        boltz_scores[col] = default
 if len(boltz_scores):
     boltz_scores['site_distance_norm'] = norm_0_100(boltz_scores['tested_site_dmin_A'], higher_is_better=False)
     boltz_scores['site_contacts_norm'] = norm_0_100(boltz_scores['tested_site_contacts_5A'], higher_is_better=True)
@@ -587,7 +597,7 @@ if len(boltz_scores):
     boltz_scores['boltz_filter_pass'] = boltz_scores['site_tested'].isin(CONFIG['boltz_sites_to_run']) & boltz_scores['boltz_geometry_call'].isin(['active_site','borderline']) & confidence_ok & ~boltz_scores['missing_output'].fillna(True)
 
 boltz_scores.to_csv(REPORTS / '04_boltz_site_filter_all_models.csv', index=False)
-usable = boltz_scores[~boltz_scores.get('missing_output', True).fillna(True)].copy() if len(boltz_scores) else pd.DataFrame()
+usable = boltz_scores[~boltz_scores['missing_output'].fillna(True)].copy() if len(boltz_scores) else pd.DataFrame()
 if len(usable):
     usable = usable.sort_values(['boltz_filter_pass', 'boltz_filter_score'], ascending=[False, False])
     boltz_best = usable.groupby('peptide_id', as_index=False).head(1).reset_index(drop=True)
