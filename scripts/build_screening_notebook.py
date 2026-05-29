@@ -71,7 +71,7 @@ INSTALL_LIGHTDOCK=true
 INSTALL_OPENMM_GBSA=true
 
 apt-get update -qq || true
-apt-get install -y -qq git wget curl zip build-essential ninja-build gawk
+apt-get install -y -qq git wget curl zip build-essential ninja-build gawk bzip2
 python -m pip -q install --upgrade pip wheel packaging virtualenv
 python -m pip -q install 'numpy<2.2' pandas biopython pyyaml py3Dmol PeptideBuilder pdb-tools
 
@@ -80,7 +80,14 @@ if [ "$INSTALL_OPENMM_GBSA" = true ]; then
 fi
 
 if [ "$INSTALL_LIGHTDOCK" = true ]; then
-  python -m pip -q install 'prody<3' lightdock==0.9.2post1 || echo "WARNING: LightDock install failed."
+  # LightDock depends on ProDy, which often fails to build in Colab's Python 3.12.
+  # Keep it in a Python 3.10 micromamba environment and call its scripts by path.
+  mkdir -p /content/bin
+  if [ ! -x /content/bin/micromamba ]; then
+    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C /content/bin --strip-components=1 bin/micromamba
+  fi
+  /content/bin/micromamba create -y -p /content/lightdock_env -c conda-forge python=3.10 pip numpy scipy cython prody || echo "WARNING: micromamba environment creation failed."
+  /content/lightdock_env/bin/python -m pip install lightdock==0.9.2post1 || echo "WARNING: LightDock install failed inside /content/lightdock_env."
 fi
 
 if [ "$INSTALL_BOLTZ2" = true ]; then
@@ -97,8 +104,10 @@ import importlib.util, shutil, sys
 print('Notebook Python:', sys.version.split()[0])
 for name, module in [('pandas','pandas'), ('Bio','Bio'), ('yaml','yaml'), ('py3Dmol','py3Dmol'), ('PeptideBuilder','PeptideBuilder'), ('openmm','openmm')]:
     print(f'{name:18s}:', 'OK' if importlib.util.find_spec(module) else 'missing')
-print('lightdock3_setup.py:', shutil.which('lightdock3_setup.py') or 'missing')
-print('lightdock3.py      :', shutil.which('lightdock3.py') or 'missing')
+ld_bin = Path('/content/lightdock_env/bin')
+print('lightdock3_setup.py:', ld_bin / 'lightdock3_setup.py' if (ld_bin / 'lightdock3_setup.py').exists() else shutil.which('lightdock3_setup.py') or 'missing')
+print('lightdock3.py      :', ld_bin / 'lightdock3.py' if (ld_bin / 'lightdock3.py').exists() else shutil.which('lightdock3.py') or 'missing')
+print('lgd_generate       :', ld_bin / 'lgd_generate_conformations.py' if (ld_bin / 'lgd_generate_conformations.py').exists() else shutil.which('lgd_generate_conformations.py') or 'missing')
 print('boltz             :', Path('/content/boltz_env/bin/boltz') if Path('/content/boltz_env/bin/boltz').exists() else shutil.which('boltz') or 'missing')
 PY
 """
@@ -181,6 +190,10 @@ RUN_DOCKING = False #@param {type:'boolean'}
 RUN_MMGBSA = False #@param {type:'boolean'}
 
 BOLTZ_CMD = str(Path('/content/boltz_env/bin/boltz')) if Path('/content/boltz_env/bin/boltz').exists() else shutil.which('boltz')
+LIGHTDOCK_BIN = Path('/content/lightdock_env/bin')
+LIGHTDOCK_SETUP = str(LIGHTDOCK_BIN / 'lightdock3_setup.py') if (LIGHTDOCK_BIN / 'lightdock3_setup.py').exists() else shutil.which('lightdock3_setup.py')
+LIGHTDOCK_RUN = str(LIGHTDOCK_BIN / 'lightdock3.py') if (LIGHTDOCK_BIN / 'lightdock3.py').exists() else shutil.which('lightdock3.py')
+LIGHTDOCK_GENERATE = str(LIGHTDOCK_BIN / 'lgd_generate_conformations.py') if (LIGHTDOCK_BIN / 'lgd_generate_conformations.py').exists() else shutil.which('lgd_generate_conformations.py')
 if Path('/usr/local/cuda').exists() and not os.environ.get('CUDA_HOME'):
     os.environ['CUDA_HOME'] = '/usr/local/cuda'
     os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
@@ -188,14 +201,16 @@ if Path('/usr/local/cuda').exists() and not os.environ.get('CUDA_HOME'):
 
 TOOL_STATUS = {
     'boltz': BOLTZ_CMD is not None,
-    'lightdock_setup': shutil.which('lightdock3_setup.py') is not None,
-    'lightdock_run': shutil.which('lightdock3.py') is not None,
-    'lightdock_generate': shutil.which('lgd_generate_conformations.py') is not None,
+    'lightdock_setup': LIGHTDOCK_SETUP is not None,
+    'lightdock_run': LIGHTDOCK_RUN is not None,
+    'lightdock_generate': LIGHTDOCK_GENERATE is not None,
 }
 print('Workdir:', ROOT)
 print('Boltz command:', BOLTZ_CMD or 'missing')
 print('CUDA_HOME:', os.environ.get('CUDA_HOME', 'not set'))
 print('Tool status:', TOOL_STATUS)
+print('LightDock setup:', LIGHTDOCK_SETUP or 'missing')
+print('LightDock run:', LIGHTDOCK_RUN or 'missing')
 """
     ),
     md(
@@ -668,10 +683,13 @@ if RUN_DOCKING and (not TOOL_STATUS['lightdock_setup'] or not TOOL_STATUS['light
 if RUN_DOCKING:
     for _, job in prepared_docking.iterrows():
         d = Path(job['dock_dir'])
-        run_cmd(['lightdock3_setup.py', 'receptor.pdb', 'peptide_start.pdb', '-s', CONFIG['lightdock_swarms'], '-g', CONFIG['lightdock_glowworms'], '-r', 'restraints.list', '--noxt', '--noh', '--now', '-spr', '8'], cwd=d)
-        run_cmd(['lightdock3.py', 'setup.json', CONFIG['lightdock_steps'], '-s', CONFIG['lightdock_score'], '-c', CONFIG['lightdock_cores']], cwd=d)
-        for gso in sorted(d.glob('swarm_*/gso_*.out')):
-            run_cmd(['lgd_generate_conformations.py', '../receptor.pdb', '../peptide_start.pdb', gso.name, str(CONFIG['lightdock_top_models_per_swarm']), '--setup', '../setup.json'], cwd=gso.parent, allow_fail=True)
+        run_cmd([LIGHTDOCK_SETUP, 'receptor.pdb', 'peptide_start.pdb', '-s', CONFIG['lightdock_swarms'], '-g', CONFIG['lightdock_glowworms'], '-r', 'restraints.list', '--noxt', '--noh', '--now', '-spr', '8'], cwd=d)
+        run_cmd([LIGHTDOCK_RUN, 'setup.json', CONFIG['lightdock_steps'], '-s', CONFIG['lightdock_score'], '-c', CONFIG['lightdock_cores']], cwd=d)
+        if LIGHTDOCK_GENERATE:
+            for gso in sorted(d.glob('swarm_*/gso_*.out')):
+                run_cmd([LIGHTDOCK_GENERATE, '../receptor.pdb', '../peptide_start.pdb', gso.name, str(CONFIG['lightdock_top_models_per_swarm']), '--setup', '../setup.json'], cwd=gso.parent, allow_fail=True)
+        else:
+            print('WARNING: lgd_generate_conformations.py is missing, so docking scores may exist but pose PDB files will not be generated.')
 else:
     print('RUN_DOCKING=False. Prepared docking folders:', DOCKING_DIR)
 prepared_docking

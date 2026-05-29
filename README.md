@@ -40,3 +40,5 @@ The notebook intentionally omits the previous docking, PAS-filter, HADDOCK, Ligh
 7. Enable `RUN_DOCKING` and `RUN_MMGBSA` only after the upstream outputs look reasonable.
 
 Screening outputs are written under `/content/hache_peptide_screening_boltz2` and can be exported as `hache_peptide_screening_boltz2_results.zip`.
+
+LightDock is installed in a separate `/content/lightdock_env` Python 3.10 environment because Colab's default Python 3.12 can fail while building ProDy. The notebook detects and calls the LightDock scripts from that environment automatically.
